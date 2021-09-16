@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-print("Hi Hope")
+print("Hi!")
 
 gtf_name="Gac_white_70hpf_ens_as_1.bed"
 ens_g_names="ens_id_as1_w_G_names_locs.txt"
@@ -10,9 +10,9 @@ transids = {}
 #getting ids
 
 import regex as re
-problem_children={}
-problem_children_locations = {}
-problem_children_found = {}
+genes_w_multiple_ens_ids_for_one_g_id={}
+genes_w_multiple_ens_ids_for_one_g_id_locations = {}
+genes_w_multiple_ens_ids_for_one_g_id_found = {}
 
 with open (ens_g_names, "r") as names:
     for line in names:
@@ -35,21 +35,21 @@ with open (ens_g_names, "r") as names:
             elif gname in geneids:
                 if geneids[gname][5]!= ensgname:
                     print("conflict", geneids[gname][5], geneids[gname][0], geneids[gname][1], geneids[gname][2], ensgname, chro, start, end)
-                    if gname not in problem_children:
-                        problem_children[gname]=tname
-                        problem_children_locations[gname]=[[chro, start, end, gname, tname, ensgname, enstname]]
-                        problem_children_locations[gname].append([geneids[gname][0],geneids[gname][1], geneids[gname][2],geneids[gname][3], geneids[gname][4], geneids[gname][5], geneids[gname][6]])
-                        print(problem_children_locations[gname])
-                    if gname in problem_children:
-                        problem_children_locations[gname].append([chro, start, end, gname, tname, ensgname, enstname])
-                    #problem_children_locations[(geneids[gname][0],geneids[gname][1], geneids[gname][2])]=[geneids[gname][3], geneids[gname][4], geneids[gname][5], geneids[gname][6]]
+                    if gname not in genes_w_multiple_ens_ids_for_one_g_id:
+                        genes_w_multiple_ens_ids_for_one_g_id[gname]=tname
+                        genes_w_multiple_ens_ids_for_one_g_id_locations[gname]=[[chro, start, end, gname, tname, ensgname, enstname]]
+                        genes_w_multiple_ens_ids_for_one_g_id_locations[gname].append([geneids[gname][0],geneids[gname][1], geneids[gname][2],geneids[gname][3], geneids[gname][4], geneids[gname][5], geneids[gname][6]])
+                        print(genes_w_multiple_ens_ids_for_one_g_id_locations[gname])
+                    if gname in genes_w_multiple_ens_ids_for_one_g_id:
+                        genes_w_multiple_ens_ids_for_one_g_id_locations[gname].append([chro, start, end, gname, tname, ensgname, enstname])
+                    #genes_w_multiple_ens_ids_for_one_g_id_locations[(geneids[gname][0],geneids[gname][1], geneids[gname][2])]=[geneids[gname][3], geneids[gname][4], geneids[gname][5], geneids[gname][6]]
 
 
 
 
-print(len(problem_children))
-#print(problem_children_locations)
-print(len(problem_children_locations))
+print(len(genes_w_multiple_ens_ids_for_one_g_id))
+#print(genes_w_multiple_ens_ids_for_one_g_id_locations)
+print(len(genes_w_multiple_ens_ids_for_one_g_id_locations))
 print("done file 1")
 
 c=0
@@ -66,7 +66,7 @@ with open(gtf_name, "r") as gtf, open(new, "w") as newby:
         gname = line[3].split(';')
         gname = gname[0]
         #print(gname)
-        if gname not in problem_children and gname in geneids:
+        if gname not in genes_w_multiple_ens_ids_for_one_g_id and gname in geneids:
             a+=1
             #pulling info [chro, start, end, gname, tname,ensgname, enstname]
             myinfo=geneids[gname]
@@ -81,13 +81,13 @@ with open(gtf_name, "r") as gtf, open(new, "w") as newby:
             newby.write(s + "\n")
             #print("done")
 
-        elif gname in problem_children:
+        elif gname in genes_w_multiple_ens_ids_for_one_g_id:
              c+=1
              #print(gname, line)
              chro=line[0]
              start=float(line[1])
              end=float(line[2])
-             num_trans = len(problem_children_locations[gname])
+             num_trans = len(genes_w_multiple_ens_ids_for_one_g_id_locations[gname])
              #print(gname, chro, start, end)
             
             #finding the gene that this record is the best match to probably
@@ -95,27 +95,27 @@ with open(gtf_name, "r") as gtf, open(new, "w") as newby:
              bestmatchdist=0
              bestmatchdist2=0
              for i in range(num_trans):
-                #print(i, "it starts", problem_children_locations[gname][i][1], "gene nane", problem_children_locations[gname][i][5])
-                dist=abs(float(problem_children_locations[gname][i][1])-start)
-                dist2=abs(float(problem_children_locations[gname][i][2])-end)
-                #print(problem_children_locations[gname][i])
+                #print(i, "it starts", genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i][1], "gene nane", genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i][5])
+                dist=abs(float(genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i][1])-start)
+                dist2=abs(float(genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i][2])-end)
+                #print(genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i])
                 #print(i, dist)
                 if i==0:
                     bestmatchdist=dist
                     bestmatchdist2=dist2
-                    bestmatchg=problem_children_locations[gname][i][5]
-                    bestmatcht=problem_children_locations[gname][i][6]
+                    bestmatchg=genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i][5]
+                    bestmatcht=genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i][6]
                     #print("starting", bestmatchdist)
                 elif dist<bestmatchdist and dist2<bestmatchdist2:
                     bestmatchdist=dist
                     bestmatchdist2=dist2
-                    bestmatchg=problem_children_locations[gname][i][5]
-                    bestmatcht=problem_children_locations[gname][i][6]
+                    bestmatchg=genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i][5]
+                    bestmatcht=genes_w_multiple_ens_ids_for_one_g_id_locations[gname][i][6]
                     #print("best fit", start, bestmatchdist)
                 else:
                     #print("not best match", dist)
                     pass
-             #print(line[3], problem_children_locations[gname])
+             #print(line[3], genes_w_multiple_ens_ids_for_one_g_id_locations[gname])
             # print("FINAL PICK", bestmatcht, bestmatchdist)
 
              if line[0]=="MT":
@@ -130,7 +130,7 @@ with open(gtf_name, "r") as gtf, open(new, "w") as newby:
              #print("NEWLINE", line)
 
 
-        elif gname not in geneids or gname in problem_children:
+        elif gname not in geneids or gname in genes_w_multiple_ens_ids_for_one_g_id:
             #print(safeline)
             c+=1
             newby.write(safeline + "\n")
@@ -139,7 +139,7 @@ with open(gtf_name, "r") as gtf, open(new, "w") as newby:
 
 print("safe lines",a)
 print("problems lines+normal lines without gene ids", c)
-print("problem children", len(problem_children))
+print("problem children", len(genes_w_multiple_ens_ids_for_one_g_id))
 #print("transcripts saved", transcripts)
 
-#print(problem_children)
+#print(genes_w_multiple_ens_ids_for_one_g_id)
