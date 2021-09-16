@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=tama      ### Job Name
+#SBATCH --output=tama-%j.out         ### File in which to store job output
+#SBATCH --error=tama-%j.err          ### File in which to store job error messages
+#SBATCH --time=0-02:00:00       ### Wall clock time limit in Days-HH:MM:SS
+#SBATCH --nodes=1               ### Node count required for the job
+#SBATCH --ntasks-per-node=1     ### Nuber of tasks to be launched per Node
+#SBATCH --cpus-per-task=1       ### Number of cpus (cores) per task
+
+/usr/bin/time -v python tama_merge.py -f filelist_merge.txt -p output_prefix -s ensembl -cds ensembl -d merge_dup
+

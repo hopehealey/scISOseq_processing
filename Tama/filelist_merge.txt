@@ -1,0 +1,3 @@
+Gasterosteus_aculeatus.BROADS1.104.mod.noheader.bed	capped	2,2,2	ensembl
+all_stickle_isoseq.sqanti_classification.filtered_lite.bed	capped	1,1,1	isoseq
+

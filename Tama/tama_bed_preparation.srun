@@ -1,0 +1,8 @@
+conda install -c bioconda bedparse
+
+bedparse gtf2bed --extraFields gene_id Gasterosteus_aculeatus.BROADS1.104.mod.gtf > Gasterosteus_aculeatus.BROADS1.104.mod.bed
+cat Gasterosteus_aculeatus.BROADS1.104.mod.bed | awk -v OFS='\t' '{print $1,$2,$3, $13 ";" $4, $5, $6,$7,$8,$9,$10,$11,$12}' > Gasterosteus_aculeatus.BROADS1.104.mod2.bed
+
+bedparse gtf2bed --extraFields gene_id all_stickle_isoseq.sqanti_classification.filtered_lite.gtf > all_stickle_isoseq.sqanti_classification.filtered_lite.bed
+
+cat  all_stickle_isoseq.sqanti_classification.filtered_lite.bed | awk -v OFS='\t' '{print $1,$2,$3, $13 ";" $4, $5, $6,$7,$8,$9,$10,$11,$12}' > all_stickle_isoseq.sqanti_classification.filtered_lite2.bed

@@ -1,0 +1,1 @@
+ python tama_go/format_converter/tama_convert_bed_gtf_ensembl_no_cds.py Gac_white_70hpf_ens_as_1_modnames.bed Gac_white_70hpf_ens_as_1_modnames.gtf
