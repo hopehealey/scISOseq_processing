@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --job-name=GacCount-%j      ### Job Name
+#SBATCH --output=Gac70hpfCount-%j.out         ### File in which to store job output
+#SBATCH --error=Gac70hpfCount-%j.err          ### File in which to store job error messages
+#SBATCH --time=0-16:00:00       ### Wall clock time limit in Days-HH:MM:SS
+#SBATCH --nodes=1               ### Node count required for the job
+#SBATCH --ntasks-per-node=1     ### Nuber of tasks to be launched per Node
+#SBATCH --cpus-per-task=12       ### Number of cpus (cores) per task
+
+module load cellranger/3.0.2
+
+/usr/bin/time -v cellranger mkgtf \
+Gasterosteus_aculeatus.BROADS1.104.gtf \ 
+Gasterosteus_aculeatus.BROADS1.104.filtered.all.gtf
+
+/usr/bin/time -v cellranger mkref \
+--genome=Gasterosteus_aculeatus_ENS_all_genome \
+--fasta=Gasterosteus_aculeatus.BROADS1.dna.toplevel.fa \
+--genes=Gasterosteus_aculeatus.BROADS1.104.filtered.all.gtf
+
+
+/usr/bin/time -v cellranger count --id=Gac_ENS_all --fastqs=file_dictory --sample=Gac_70dpf_Illumina --transcriptome=Gasterosteus_aculeatus_ENS_all_genome
