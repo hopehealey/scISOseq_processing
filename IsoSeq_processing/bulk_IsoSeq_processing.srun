@@ -1,0 +1,8 @@
+
+/usr/bin/time -v ccs Bulk_reads.bam Bulk_reads.ccs.bam --min-rq 0.9
+
+/usr/bin/time -v lima --isoseq --dump-clips Bulk_reads.ccs.bam  primers.fasta Bulk_reads.ccs.clipped.bam
+
+/usr/bin/time -v isoseq3 refine Bulk_reads.ccs.clipped.5p--3p.bam primers.fasta Bulk_reads.ccs.clipped.bam.ccs.clipped.5p--3p.refined.bam --require-polya
+
+/usr/bin/time -v isoseq3 cluster filenames_all_bulk_IsoSeq.fofn allBulkIsoseq.subreads.ccs.clipped.5p--3p.refined.dedup.bam --verbose
