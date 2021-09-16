@@ -1,0 +1,8 @@
+/usr/bin/time -v /sqanti3_qc.py \
+all_stickle_isoseq_collapsed.collapsed.gff \
+Gasterosteus_aculeatus.BROADS1.104.gtf Gasterosteus_aculeatus.BROADS1.dna.toplevel.fa -o all_stickle_isoseq.sqanti --report both --cpus 4
+
+/usr/bin/time -v /sqanti3_RulesFilter.py \
+all_stickle_isoseq.sqanti_classification.txt \
+all_stickle_isoseq.sqanti_corrected.fasta \
+all_stickle_isoseq.sqanti_corrected.gtf

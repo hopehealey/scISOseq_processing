@@ -1,0 +1,6 @@
+sort -k 3,3 -k 4,4n all_stickle_isoseq.fasta.sam > all_stickle_isoseq.fasta.sorted.sam
+
+collapse_isoforms_by_sam.py --input all_stickle_isoseq.fasta \
+   -s all_stickle_isoseq.fasta.sorted.sam -c 0.99 -i 0.95 \
+      --gen_mol_count \ 
+      -o all_stickle_isoseq_collapsed

@@ -1,0 +1,8 @@
+module load easybuild  icc/2017.1.132-GCC-6.3.0-2.27  impi/2017.1.132
+module load easybuild  ifort/2017.1.132-GCC-6.3.0-2.27  impi/2017.1.132
+module load minimap2/2.7
+
+/usr/bin/time -v minimap2 -t 8 -ax splice -uf -O6,24 -B4 Gasterosteus_aculeatus.BROADS1.dna.toplevel.fa \
+all_stickle_isoseq.fasta \
+> all_stickle_isoseq.fasta.sam \
+2> all_stickle_isoseq.fasta.sam.log
