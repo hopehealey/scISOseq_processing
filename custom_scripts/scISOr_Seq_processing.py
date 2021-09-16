@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-print("Hi hope")
+print("Hi!")
 
 import argparse
 
