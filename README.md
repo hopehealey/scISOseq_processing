@@ -1,6 +1,7 @@
 # scISOseq_processing
 Scripts to process scISOseq data and run scRNAseq analysis.
 
+## scISOr-Seq Workflow for final annotation 
 ![alt text](https://github.com/hopehealey/scISOseq_processing/blob/d861c92879b85fe2f6a1c182dab2536bfd21f989/scISOrSeq_paper_workflow.png)
 
 
