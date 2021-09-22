@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 print("Hi!")
 
+#used to generate supplemental file 1
+#using the same inputs as tama_associating_ensembl_ids_with_genes.py
 gtf_name="Gac_white_70hpf_ens_as_1.bed"
 ens_g_names="ens_id_as1_w_G_names_locs.txt"
 new="Gac_white_70hpf_ens_as_1_distributions.csv"
@@ -20,6 +22,8 @@ size_lib = []
 end_lib = []
 start_lib = []
 
+#taking same approach as in tama_associating_ensembl_ids_with_genes.py
+#to capture where the ensembl genes are located
 with open (ens_g_names, "r") as names:
     for line in names:
         line=line.strip()
@@ -62,6 +66,12 @@ c=0
 a=0
 transcripts=0
 
+#now going through the original file
+#ignoring any line that has an ensembl id associated with it
+#for all other lines, checking which ensembl id is associated with that gene id
+#they taking the difference in start site from the line and the ensembl id,
+#difference in stop site, and distance in overall size (not cDNA size)
+#for each line, we output these differences into the new file
 with open(gtf_name, "r") as gtf, open(new, "w") as stats:
     stats.write("gene_name" + ","+ "size_dif" + "," + "start_diff" + ","+ "end_diff"+ "\n")
     for line in gtf:
@@ -107,6 +117,7 @@ with open(gtf_name, "r") as gtf, open(new, "w") as stats:
             stats.write(line[3] + "," + str(size_diff) + "," + str(start_diff) + "," + str(end_diff) + "\n")
 
 
+#printing out a few summary statistics
 
 print(sum(size_lib)/len(size_lib))
 print(min(size_lib))
