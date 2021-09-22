@@ -1,0 +1,680 @@
+---
+title: "scISOrseq scRNAseq analysis"
+author: "Hope Healey"
+date: "9/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Loading in necessary packages
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(Seurat)
+library(tidyverse)
+library(cowplot)
+library(Matrix.utils)
+library(edgeR)
+library(dplyr)
+library(magrittr)
+library(Matrix)
+library(purrr)
+library(reshape2)
+library(S4Vectors)
+library(tibble)
+library(pheatmap)
+library(png)
+library(DESeq2)
+library(RColorBrewer)
+library(sctransform)
+(future.globals.maxSize = 4000 * 1024^5)
+
+sessionInfo()
+```
+
+# Analyzing scRNAseq results from the pooled Iso-Seq and merged with ensembl annotation
+
+```{r}
+setwd()
+
+# Load dylan's dataset
+GAC70hpf.data <- Read10X()
+
+# Initialize the Seurat object with the raw (non-normalized data).
+stick <- CreateSeuratObject(counts = GAC70hpf.data, project = "StickleAtlas", min.cells = 3, min.features = 200)
+stick
+```
+
+# Normalizing data and Clustering cells into identities
+```{r, fig.height=3, fig.width=5}
+stickle <- PercentageFeatureSet(stick, pattern = "^MT", col.name = "percent.mt")
+stickle <- SCTransform(stickle, method = "glmGamPoi", verbose = TRUE)
+
+stickle <- RunPCA(stickle, verbose = FALSE)
+
+ElbowPlot(object = stickle, ndims=50)
+
+stickle <- RunUMAP(stickle, dims = 1:38, verbose = FALSE)
+
+stickle <- FindNeighbors(stickle, dims = 1:38, verbose = FALSE)
+stickle <- FindClusters(stickle, verbose = FALSE)
+
+library(gridExtra)
+
+
+UMAP2 <- DimPlot(stickle, label = FALSE, label.size = 6) 
+UMAP2
+
+UMAP <- DimPlot(stickle, label = TRUE, label.size = 6) 
+UMAP
+```
+
+```{r}
+#cells per cluster
+table(Idents(stickle))
+```
+
+
+# Cluster Identificaton
+
+```{r}
+#let's figure out some cell identities using markers from Farnsworth et al.2020
+
+genes <- c("ednrab", "fgf20b", "barx1", "dlx4b", "dlx6a", "dlx1a", "dlx2a", "fli1a")
+
+DotPlot(stickle, features =c("ENSGACG00000017219", "ENSGACG00000018613", "ENSGACG00000009881", "ENSGACG00000006780", "ENSGACG00000004931", "ENSGACG00000004533", "ENSGACG00000004914", "ENSGACG00000006586"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("cranial neural crest markers") + scale_x_discrete(labels=genes)
+```
+
+## FindAllMarkers initial approach to determine cluster identities
+
+```{r}
+stickle.markers <- FindAllMarkers(stickle, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+```
+
+
+```{r, fig.widht=30, fig.height=30}
+
+stickle.markers %>%
+    group_by(cluster) %>%
+    top_n(n = 10, wt=avg_logFC) -> top10
+
+library(viridis)
+DoHeatmap(stickle, features=top10$gene) + NoLegend() + scale_fill_viridis()
+
+write.csv(top10, "stickleback_top10_marker_genes.csv",row.names=FALSE)
+```
+
+
+## Examining marker genes identified in Farnsworth et al. (2020)'s zebrafish atlas
+
+```{r, fig.width=6}
+
+#pharyngeal endoderm
+
+genes <- c("gata5", "alcama", "padi2", "fermt1", "nkx2.3", "pdgfab", "foxi1")
+
+DotPlot(stickle, features =c("ENSGACG00000003649", "ENSGACG00000020101", "ENSGACG00000004797", "ENSGACG00000012478", "ENSGACG00000007568", "ENSGACG00000011408", "ENSGACG00000002658"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("pharyngeal endoderm markers") + scale_x_discrete(labels=genes)
+
+#neural crest
+
+genes <- c("ednrab", "fgf20b", "barx1", "dlx4b", "dlx6a", "dlx1a", "dlx2a", "fli1a")
+
+DotPlot(stickle, features =c("ENSGACG00000017219", "ENSGACG00000018613", "ENSGACG00000009881", "ENSGACG00000006780", "ENSGACG00000004931", "ENSGACG00000004533", "ENSGACG00000004914", "ENSGACG00000006586"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("cranial neural crest markers") + scale_x_discrete(labels=genes)
+
+
+#melanocytes
+#pointing clearly to cluster 21! 
+genes <- c("tyr", "opn5", "slc24a5", "tspan10")
+DotPlot(stickle, features =c("ENSGACG00000007960", "ENSGACG00000004253", "ENSGACG00000016752", "ENSGACG00000010899"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("melanocyte markers") + scale_x_discrete(labels=genes)
+
+
+#pancreas 
+#super unclear from this
+genes <- c("fev", "gcgb", "pdx1", "rprma", "gck", "scgn", "a1cf", "c2cd4a", "renbp", "insulin")
+DotPlot(stickle, features =c("ENSGACG00000007619", "ENSGACG00000005606", "ENSGACG00000003099", "ENSGACG00000005884", "ENSGACG00000004420", "ENSGACG00000006883", "ENSGACG00000010241", "ENSGACG00000010669", "ENSGACG00000001234", "ENSGACG00000001771"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("pancreas markers") + scale_x_discrete(labels=genes)
+
+#thymus
+genes <- c("cytip", "nox1")
+DotPlot(stickle, features =c("ENSGACG00000005824", "ENSGACG00000017324"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("thymus markers") + scale_x_discrete(labels=genes)
+
+#cardiac muscle
+genes <- c("slc8a1a", "adprhl1", "ryr2b", "tnnc1a", "myh6")
+DotPlot(stickle, features =c("ENSGACG00000019885", "ENSGACG00000015338", "ENSGACG00000010126", "ENSGACG00000015148", "ENSGACG00000013782"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("cardiac muscle markers") + scale_x_discrete(labels=genes)
+
+#skeletal muscle
+genes <- c("fhl1a", "flncb", "chrng", "myl1")
+DotPlot(stickle, features =c("ENSGACG00000017268", "ENSGACG00000000642", "ENSGACG00000015082", "ENSGACG00000006539"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("skeletal muscle markers") + scale_x_discrete(labels=genes)
+
+#heart tube
+genes <- c("gata5", "tmem98", "jam2b", "tmem88a", "hand2", "sema3e", "bmp6", "pcolcea")
+DotPlot(stickle, features =c("ENSGACG00000003649", "ENSGACG00000009522", "ENSGACG00000003073", "ENSGACG00000020299", "ENSGACG00000016418", "ENSGACG00000012696", "ENSGACG00000002307", "ENSGACG00000020298"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("heart tube markers") + scale_x_discrete(labels=genes)
+
+#pharyngeal endoderm
+genes <- c("gata5", "alcama", "padi2", "fermt1", "nkx2.3", "pdgfab", "foxi1")
+DotPlot(stickle, features =c("ENSGACG00000003649", "ENSGACG00000020101", "ENSGACG00000004797", "ENSGACG00000012478", "ENSGACG00000007568", "ENSGACG00000011408", "ENSGACG00000002658"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("pharyngeal endoderm markers") + scale_x_discrete(labels=genes)
+
+#notochord cells
+genes <- c("paqr4b", "matn3b", "tbxta", "loxl5b", "gas2b", "igsf10")
+DotPlot(stickle, features =c("ENSGACG00000007239", "ENSGACG00000012967", "ENSGACG00000007637", "ENSGACG00000016914", "ENSGACG00000015541", "ENSGACG00000010238"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("notochord markers") + scale_x_discrete(labels=genes)
+
+#xanthopore
+genes <- c("cax1", "zgc:113337", "slc2a15a", "cyb561a3b", "slc2a15b", "pts", "ednrba")
+DotPlot(stickle, features =c("ENSGACG00000019703", "ENSGACG00000003619", "ENSGACG00000003828", "ENSGACG00000015842", "ENSGACG00000018278", "ENSGACG00000010227", "ENSGACG00000012901"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("xanthophore markers") + scale_x_discrete(labels=genes)
+
+
+#paracordal cartilage
+genes <- c("zgc:113142", "pcolcea", "slc2a15a", "csf1b", "ndnfl", "col9a1a")
+DotPlot(stickle, features =c("ENSGACG00000014992", "ENSGACG00000020298", "ENSGACG00000003828", "ENSGACG00000002844", "ENSGACG00000010286", "ENSGACG00000019798"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("xanthophore markers") + scale_x_discrete(labels=genes)
+
+#pgc
+genes <- c("dnd1", "adad1", "nanos3", "tdrd7a", "dazl")
+DotPlot(stickle, features =c("ENSGACG00000019630", "ENSGACG00000016712", "ENSGACG00000019003", "ENSGACG00000018592", "ENSGACG00000007001"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("premordial germ cell markers") + scale_x_discrete(labels=genes)
+
+
+#somites
+genes <- c("vcanb", "pax9", "c7a", "tcf15", "angptl7", "meox1", "twist2", "tril", "cilp")
+DotPlot(stickle, features =c("ENSGACG00000015542", "ENSGACG00000011298", "ENSGACG00000006905", "ENSGACG00000011390", "ENSGACG00000004901", "ENSGACG00000003722", "ENSGACG00000002227", "ENSGACG00000007203", "ENSGACG00000015550"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("somite markers") + scale_x_discrete(labels=genes)
+
+#spleen
+genes <- c("sult5a1", "plaua", "nox1")
+DotPlot(stickle, features =c("ENSGACG00000015459", "ENSGACG00000006694", "ENSGACG00000017324"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("spleen cell markers") + scale_x_discrete(labels=genes)
+
+#hypocord
+genes <- c("spon2a", "mnx1", "matn3b", "angpt1", "cd59")
+DotPlot(stickle, features =c("ENSGACG00000018129", "ENSGACG00000003933", "ENSGACG00000012967", "ENSGACG00000003020", "ENSGACG00000015409"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("hypochord markers") + scale_x_discrete(labels=genes)
+
+#periderm
+genes <- c("chrna5", "dpys", "trim25l", "abca4a",  "grhl3", "noxo1a")
+DotPlot(stickle, features =c("ENSGACG00000016575", "ENSGACG00000004785", "ENSGACG00000002000", "ENSGACG00000003020", "ENSGACG00000009501", "ENSGACG00000012005"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("periderm markers") + scale_x_discrete(labels=genes)
+
+#intestine epithelium
+genes <- c("chia.3", "mogat2", "slc34a2a", "slc13a2",  "pdzk1", "apoea")
+DotPlot(stickle, features =c("ENSGACG00000011486", "ENSGACG00000020199", "ENSGACG00000015959", "ENSGACG00000020474", "ENSGACG00000003593", "ENSGACG00000002433"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("intestine epithelium markers") + scale_x_discrete(labels=genes)
+
+#liver
+genes <- c("apobb.1", "serpina7")
+DotPlot(stickle, features =c("ENSGACG00000009637", "ENSGACG00000011672"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("liver markers") + scale_x_discrete(labels=genes)
+
+
+#endothelial
+genes <- c("f8", "vwf", "flt1", "sele",  "ccm2l", "pecam1")
+DotPlot(stickle, features =c("ENSGACG00000017671", "ENSGACG00000013135", "ENSGACG00000003066", "ENSGACG00000011663", "ENSGACG00000010511", "ENSGACG00000013350"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("endothelial markers") + scale_x_discrete(labels=genes)
+
+#macrophages
+genes <- c("xcr1a.1", "gpr34b", "tlr1", "spic")
+DotPlot(stickle, features =c("ENSGACG00000011742", "ENSGACG00000008239", "ENSGACG00000017958", "ENSGACG00000019889"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("macrophage markers") + scale_x_discrete(labels=genes)
+
+#pineal gland
+genes <- c("rdh20", "rrh", "trpm1a", "msnb", "cracr2a")
+DotPlot(stickle, features =c("ENSGACG00000001346", "ENSGACG00000001957", "ENSGACG00000017508", "ENSGACG00000018527", "ENSGACG00000019766"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("pineal gland markers") + scale_x_discrete(labels=genes)
+
+#tailbud
+genes <- c("hoxb13a", "hoxa13a", "hoxc13a", "sp5l", "hoxa13b", "pcdh8", "msng1")
+DotPlot(stickle, features =c("ENSGACG00000003421", "ENSGACG00000007134", "ENSGACG00000009389", "ENSGACG00000008991", "ENSGACG00000008296", "ENSGACG00000004057", "ENSGACG00000008864"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("tailbud markers") + scale_x_discrete(labels=genes)
+
+#hatching gland
+genes <- c("mctp2b", "styl4", "fmn1", "vtcn1", "slc30a8", "gache", "foxa3")
+DotPlot(stickle, features =c("ENSGACG00000014848", "ENSGACG00000017349", "ENSGACG00000006086", "ENSGACG00000008295", "ENSGACG00000002999", "ENSGACG00000015307", "ENSGACG00000012621"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("hatching gland markers") + scale_x_discrete(labels=genes)
+DotPlot(stickle, features = "ENSGACG00000015307")
+
+
+#blood cells
+genes <- c("tfrf1a", "susd1", "gfi1b", "slc10a4", "fech", "gata5")
+DotPlot(stickle, features =c("ENSGACG00000016373", "ENSGACG00000013341", "ENSGACG00000018134", "ENSGACG00000003961", "ENSGACG00000000651", "ENSGACG00000003649"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("blood markers") + scale_x_discrete(labels=genes)
+
+#basal cells
+genes <- c("thbs3a", "msx2a", "col4a4", "cpz", "col4a3", "olfm2b")
+DotPlot(stickle, features =c("ENSGACG00000003156","ENSGACG00000018421", "ENSGACG00000004438", "ENSGACG00000018366", "ENSGACG00000013912", "ENSGACG00000016561"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("basal cell markers") + scale_x_discrete(labels=genes)
+
+#floor plate cells
+genes <- c("foxa2", "shha", "ntn1b", "nkx6.2", "pitx3", "spon1b", "otx2a", "lmx1bb", "ntn1a", "npas1")
+DotPlot(stickle, features =c("ENSGACG00000006986", "ENSGACG00000003893", "ENSGACG00000006867", "ENSGACG00000002824", "ENSGACG00000014620", "ENSGACG00000003348", "ENSGACG00000019733", "ENSGACG00000012015", "ENSGACG00000019374", "ENSGACG00000009494"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("floor plate cell markers") + scale_x_discrete(labels=genes)
+
+###nervous system
+
+#hindbrain progenitors
+genes <- c("atoh1a", "olig4", "olig3", "egr2b", "nog2", "msx3", "fibinb", "irx1b", "draxin", "rfx4", "lbx1b", "pax7b", "prdm8", "cyp26b1", "robo4", "zic5", "msx1a")
+DotPlot(stickle, features =c("ENSGACG00000007342", "ENSGACG00000007415", "ENSGACG00000010412", "ENSGACG00000015342", "ENSGACG00000008267", "ENSGACG00000006773", "ENSGACG00000017161", "ENSGACG00000009006", "ENSGACG00000004342", "ENSGACG00000011830", "ENSGACG00000018293", "ENSGACG00000001703", "ENSGACG00000007142", "ENSGACG00000018809", "ENSGACG00000020128", "ENSGACG00000001900", "ENSGACG00000008291"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("hindbrain progenitor markers") + scale_x_discrete(labels=genes)
+
+#retinal progenitors
+genes <- c("rx2", "vsx2", "rx1", "hmx1", "nr2e1", "hmx4", "pax6b", "fabp11a", "foxd1", "cx43")
+DotPlot(stickle, features =c("ENSGACG00000016904", "ENSGACG00000005867", "ENSGACG00000010707", "ENSGACG00000019416", "ENSGACG00000008934", "ENSGACG00000018365", "ENSGACG00000016030", "ENSGACG00000003457", "ENSGACG00000015836", "ENSGACG00000004089"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("retinal progenitors markers") + scale_x_discrete(labels=genes)
+
+#spinal cord
+genes <- c("olig3", "gsx2", "olig4", "hoxd4a", "zic4", "prss35", "zic1", "zic6", "irx1b", "zic5", "fzd10", "pax3", "msx3")
+DotPlot(stickle, features =c("ENSGACG00000010412", "ENSGACG00000014255", "ENSGACG00000007415", "ENSGACG00000004551","ENSGACG00000003685", "ENSGACG00000005121", "ENSGACG00000003678", "ENSGACG00000017211", "ENSGACG00000009006", "ENSGACG00000001900", "ENSGACG00000012218", "ENSGACG00000014017", "ENSGACG00000006773"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("spinal cord cell markers") + scale_x_discrete(labels=genes)
+
+#MHB differentiating
+genes <- c("helt", "otx2a", "gata2a", "tfap2e", "ascl1b.1", "gadd45gb.1", "nkx2.2a", "ascl1a")
+DotPlot(stickle, features =c("ENSGACG00000017707", "ENSGACG00000019733", "ENSGACG00000009608", "ENSGACG00000002672", "ENSGACG00000011375", "ENSGACG00000017938", "ENSGACG00000006996", "ENSGACG00000020048"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("MHB differentiating markers") + scale_x_discrete(labels=genes)
+
+#NC derived neural progenitors
+genes <- c("erbb3b", "sox10", "foxd3", "mov10b.1", "mcamb", "prdm12b", "snai1b", "ngfrb", "slc15a2")
+DotPlot(stickle, features =c("ENSGACG00000009144", "ENSGACG00000007318", "ENSGACG00000006933", "ENSGACG00000009612", "ENSGACG00000009035", "ENSGACG00000016713", "ENSGACG00000001618", "ENSGACG00000007042", "ENSGACG00000005825"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("NC nueral progenitors markers") + scale_x_discrete(labels=genes)
+
+#lens placode
+genes <- c("slc7a11", "prox2", "cx23", "sparcl1", "lim2.1", "pitx3", "col4a3", "pltp", "mafb", "hmx1")
+DotPlot(stickle, features =c("ENSGACG00000019609", "ENSGACG00000007538", "ENSGACG00000013559", "ENSGACG00000017892", "ENSGACG00000020121", "ENSGACG00000014620", "ENSGACG00000013912", "ENSGACG00000003124", "ENSGACG00000010185", "ENSGACG00000019416"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("lens placode markers") + scale_x_discrete(labels=genes)
+
+#lens
+genes <- c("nags", "lim2.5", "crybb1l3", "cps1", "endou2", "cryba1a", "capn3a", "lim2.2", "cx23", "cygn1", "tmprss5")
+DotPlot(stickle, features =c("ENSGACG00000005126", "ENSGACG00000012494", "ENSGACG00000008625", "ENSGACG00000006528", "ENSGACG00000020730", "ENSGACG00000008658", "ENSGACG00000005212", "ENSGACG00000010543", "ENSGACG00000013559", "ENSGACG00000016688", "ENSGACG00000010730"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("lens cell markers") + scale_x_discrete(labels=genes)
+
+#lens12 
+genes <- c("crygm2d7", "crygmxl2", "cryba1b", "crybb1l3", "cryba2b", "fabp11a")
+DotPlot(stickle, features =c("ENSDARG00000076572", "ENSGACG00000005958", "ENSGACG00000020476", "ENSGACG00000008625", "ENSGACG00000007624", "ENSGACG00000003457"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("lens cell markers") + scale_x_discrete(labels=genes)
+
+#hindbrain progen12 clus
+genes <- c("nkain2", "pax2a", "lhx1a", "pax2b", "otpb", "onecutl", "plekho1a", "mpp2a", "lzts", "otpa")
+DotPlot(stickle, features =c("ENSGACG00000013248", "ENSGACG00000008391", "ENSGACG00000013605", "ENSGACG00000002432", "ENSGACG00000006004", "ENSGACG00000013501", "ENSGACG00000009977", "ENSGACG00000000468", "ENSGACG00000010595", "ENSGACG00000015770"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("hindbrain cell markers") + scale_x_discrete(labels=genes)
+
+#midbrain
+genes <- c("shox2", "dmbx1a", "zic6", "hs3st1l2", "fzd10", "pax7b", "msx1", "zic4", "irx1a", "otx2a", "barhl2", "robo4", "otx2b", "irx1b", "mapk12b")
+DotPlot(stickle, features =c("ENSGACG00000009256", "ENSGACG00000015618", "ENSGACG00000017211", "ENSGACG00000014626", "ENSGACG00000012218", "ENSGACG00000001703", "ENSGACG00000008291", "ENSGACG00000003685", "ENSGACG00000006572", "ENSGACG00000019733", "ENSGACG00000004346", "ENSGACG00000020128", "ENSGACG00000012744", "ENSGACG00000009006", "ENSGACG00000019108"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("midbrain cell markers") + scale_x_discrete(labels=genes)
+
+#forebrain
+genes <- c("fezf1", "gsx2", "emx3", "fezf2", "sox1", "lhx2b", "lmo1", "mcama", "rx3", "nkx2.4a", "nkx2.1", "six6a", "shha", "vax1", "nrp2b", "emx2", "fgf8a", "sp5a")
+DotPlot(stickle, features =c("ENSGACG00000008652", "ENSGACG00000014255", "ENSGACG00000016370", "ENSGACG00000011629", "ENSGACG00000014850", "ENSGACG00000003520", "ENSGACG00000015653", "ENSGACG00000020762", "ENSGACG00000016453", "ENSGACG00000006999", "ENSGACG00000011301", "ENSGACG00000008430", "ENSGACG00000003893", "ENSGACG00000014648", "ENSGACG00000007758", "ENSGACG00000003199", "ENSGACG00000003803", "ENSGACG00000005058"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("forebrain cell markers") + scale_x_discrete(labels=genes)
+
+
+#oligodenodrocyte
+genes <- c("nkx2.4a",  "wnt8b", "olig2", "shha", "ntn1b",  "gsx2")
+DotPlot(stickle, features =c("ENSGACG00000006999", "ENSGACG00000008478", "ENSGACG00000002152", "ENSGACG00000003893", "ENSGACG00000006867", "ENSGACG00000014255"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("oligo cell markers") + scale_x_discrete(labels=genes)
+
+#differentating retinal cells
+genes <- c("vsx1", "atoh7", "mybl1", "hes2.2", "nuerod4", "tbx2b", "onecut")
+DotPlot(stickle, features =c("ENSGACG00000012138", "ENSGACG00000003390", "ENSGACG00000002964", "ENSGACG00000006470", "ENSGACG00000008952", "ENSGACG00000013575", "ENSGACG00000016525"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("diff retinal cell markers") + scale_x_discrete(labels=genes)
+
+#otic placode
+genes <- c("otomp", "otog")
+DotPlot(stickle, features =c("ENSGACG00000010021", "ENSGACG00000017343"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("otic placode markers") + scale_x_discrete(labels=genes)
+
+
+###taking a break form neural
+genes <- c("tbx5a", "tbx18")
+DotPlot(stickle, features =c("ENSGACG00000016787", "ENSGACG00000005602"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("fin bud markers") + scale_x_discrete(labels=genes)
+
+genes <- c("ninj2", "clec3a", "pcolceb", "acana")
+DotPlot(stickle, features =c("ENSGACG00000019673", "ENSGACG00000015733", "ENSGACG00000019312", "ENSDARG00000035891", "ENSGACG00000005741"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("cartilage markers") + scale_x_discrete(labels=genes)
+
+#pronephros 
+genes <- c("vill", "gcnt7", "ddx4", "tph1b", "prrl15la")
+DotPlot(stickle, features =c("ENSGACG00000003464", "ENSGACG00000005941", "ENSGACG00000015323", "ENSGACG00000012591", "ENSGACG00000005720"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("pronephros markers") + scale_x_discrete(labels=genes)
+
+```
+
+### Adding in proto-annotations
+
+```{r, fig.width=4}
+stickle <- RenameIdents(object = stickle, '18'="Pharyngeal Arch NC", '26'="Endothelial", '24'="Neural cluster 1", '22'="Hematopoetic", '20'="eye", '19'="muscle", '17'="blood", '13'="Neural2", '12'="gut", '11'="Neural3", '5'="Neural4", '8'="muscle2")
+
+stickle <- RenameIdents(object = stickle, `21`="Melanocytes", `23`="Heart", `14`="endoderm",`6`="Notochord", `9`="Somites", `25`="Intestinal Epithelium/Pancreas", `29`="Hatching gland", `0`="Hindbrain progenitors", `10`="Retinal progenitors", `28`="NC nueral progenitors", `2`="Hindbrain", `7`= "Midbrain (?)", `16`="Differentiating Retinal cells", `Neural2`="Forebrain", `27`="CNC derived Neural")
+
+UMAP <- DimPlot(stickle, label = TRUE) 
+UMAP
+```
+
+## FindMarkers() appraoch to cluster annotation (converting to orthologous zebrafish gene names)
+
+```{r}
+library(biomaRt)
+
+zebrafish <- useMart("ensembl", dataset = "drerio_gene_ensembl")
+stickleback <- useMart("ensembl", dataset = "gaculeatus_gene_ensembl") 
+stickle_to_zebrafish_ids <- getLDS(attributes = c("ensembl_gene_id"), mart=stickleback, attributesL = c("ensembl_gene_id"), martL=zebrafish)
+stickle_to_zebrafish_ids2 <- getLDS(attributes = c("ensembl_gene_id"), mart=stickleback, attributesL = c("external_gene_name"), martL=zebrafish)
+
+library("org.Dr.eg.db")
+#checking marker genes for clusters missing identities: 
+
+#15 seems like head mesenchyme/cartilage
+my_markers <- FindMarkers(stickle, ident.1="15", only.pos=TRUE)
+is.de <- my_markers$p_val_adj <= .05
+switched <- merge(my_markers, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switched2 <- merge(my_markers, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#3 - nervous system unknown
+my_markers3 <- FindMarkers(stickle, ident.1="3", only.pos=TRUE)
+is.de <- my_markers3$p_val_adj <= .05
+switched3 <- merge(my_markers3, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switched3.5 <- merge(my_markers3, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+
+#4 - eye/nervous system??
+my_markers4 <- FindMarkers(stickle, ident.1="4", only.pos=TRUE)
+is.de4 <- my_markers4$p_val_adj <= .05
+switched4 <- merge(my_markers4, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switched4.5 <- merge(my_markers4, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+
+#1 - unknown!!!
+my_markers1 <- FindMarkers(stickle, ident.1="1", only.pos=TRUE)
+is.de <- my_markers1$p_val_adj <= .05
+switched1 <- merge(my_markers1, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switched1.5 <- merge(my_markers1, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+
+#heart
+my_markersH <- FindMarkers(stickle, ident.1="Heart", only.pos=TRUE)
+switchedH <- merge(my_markersH, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedH.5 <- merge(my_markersH, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+
+#eye
+my_markersEY <- FindMarkers(stickle, ident.1="eye", only.pos=TRUE)
+switchedEY <- merge(my_markersEY, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedEY.5 <- merge(my_markersEY, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#blood
+my_markersBL <- FindMarkers(stickle, ident.1="blood", only.pos=TRUE)
+switchedBL <- merge(my_markersBL, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedBL.5 <- merge(my_markersBL, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#Hematopoetic
+my_markersHE <- FindMarkers(stickle, ident.1="Hematopoetic", only.pos=TRUE)
+switchedHE <- merge(my_markersHE, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedHE.5 <- merge(my_markersHE, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#melanocytes
+my_markersME <- FindMarkers(stickle, ident.1="Melanocytes", only.pos=TRUE)
+is.deME <- my_markersME$p_val_adj <= .05
+switchedME <- merge(my_markersME, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedME.5 <- merge(my_markersME, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#Intestinal Epithelium/Pancreas
+my_markersINS <- FindMarkers(stickle, ident.1="Intestinal Epithelium/Pancreas", only.pos=TRUE)
+switchedINS <- merge(my_markersINS, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedINS.5 <- merge(my_markersINS, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#hatching 
+my_markersHAT <- FindMarkers(stickle, ident.1="Hatching gland", only.pos=TRUE)
+switchedHAT <- merge(my_markersHAT, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedHAT.5 <- merge(my_markersHAT, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#somites
+my_markersSOM <- FindMarkers(stickle, ident.1="Somites", only.pos=TRUE)
+switchedSOM <- merge(my_markersSOM, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedSOM.5 <- merge(my_markersSOM, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#notochord
+my_markersNOT <- FindMarkers(stickle, ident.1="Notochord", only.pos=TRUE)
+switchedNOT <- merge(my_markersNOT, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedNOT.5 <- merge(my_markersNOT, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#entholial 
+my_markersEND <- FindMarkers(stickle, ident.1="Endothelial", only.pos=TRUE)
+switchedEND <- merge(my_markersEND, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedEND.5 <- merge(my_markersEND, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#NC neural 
+my_markersNCN <- FindMarkers(stickle, ident.1="NC nueral progenitors", only.pos=TRUE)
+switchedNCN <- merge(my_markersNCN, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedNCN.5 <- merge(my_markersNCN, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#NC2 
+my_markersCNC<- FindMarkers(stickle, ident.1="CNC derived Neural", only.pos=TRUE)
+switchedCNC <- merge(my_markersCNC, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedCNC.5 <- merge(my_markersCNC, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#musc2
+my_markersMUS2<- FindMarkers(stickle, ident.1="muscle2", only.pos=TRUE)
+switchedMUS2 <- merge(my_markersMUS2, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedMUS2.5 <- merge(my_markersMUS2, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#musc 
+my_markersMUS<- FindMarkers(stickle, ident.1="muscle", only.pos=TRUE)
+switchedMUS <- merge(my_markersMUS, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedMUS.5 <- merge(my_markersMUS, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#gut
+my_markersgut <- FindMarkers(stickle, ident.1="12", only.pos=TRUE)
+switchedgut <- merge(my_markersgut, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedgut.5 <- merge(my_markersgut, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#neural cluster 1
+my_markersN1 <- FindMarkers(stickle, ident.1="Neural cluster 1", only.pos=TRUE)
+switchedN1 <- merge(my_markersN1, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedN1.5 <- merge(my_markersN1, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#diff retinal
+my_markersdRE <- FindMarkers(stickle, ident.1="Differentiating Retinal cells", only.pos=TRUE)
+switcheddRE <- merge(my_markersdRE, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switcheddRE.5 <- merge(my_markersdRE, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#Retinal progenitors
+my_markersdRPO <- FindMarkers(stickle, ident.1="Retinal progenitors", only.pos=TRUE)
+switchedRPO <- merge(my_markersdRPO, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedRPO.5 <- merge(my_markersdRPO, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#Forebrain 
+my_markersdFOR <- FindMarkers(stickle, ident.1="Neural2", only.pos=TRUE)
+switchedFOR <- merge(my_markersdFOR, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedFOR.5 <- merge(my_markersdFOR, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+
+#endoderm
+my_markersdDERM <- FindMarkers(stickle, ident.1="endoderm", only.pos=TRUE)
+switchedDERM <- merge(my_markersdDERM, stickle_to_zebrafish_ids, by.x=0, by.y=1)
+switchedDERM.5 <- merge(my_markersdDERM, stickle_to_zebrafish_ids2, by.x=0, by.y=1)
+```
+
+# Determining sox9a and sox9b expression
+
+```{r, fig.width=3, fig.height=4}
+#chondrogenesis markers 
+#looks like sox9b's gene model was improved but not sox9a so this should be taken lightly
+FeaturePlot(stickle, "ENSGACG00000005675", cols = c("grey", "violet")) + ggtitle("sox9a")
+FeaturePlot(stickle, "ENSGACG00000011185", cols = c("grey", "violet")) + ggtitle("sox9b")
+
+FeaturePlot(stickle, "ENSGACG00000003649") + ggtitle("gata5")
+
+DotPlot(stickle, features="ENSGACG00000011185", cols = c("hotpink", "hotpink4"))+ ggtitle("sox9b expression at 70hpf") + scale_x_discrete(labels="sox9b") + scale_y_discrete(labels=c("0-Hindbrain progenitors", "1-Unknown cells", "2-Hindbrain", "3-Neural 1", "4-Neural 2", "5-Neural 3", "6-Somites 1", "7-Midbrain", "8-Developing Muscle", "9-Somites 2", "10-Retinal progenitors", "11-Neural 4", "12-Epidermis", "13-Neural 5", "14-Pharyngeal endoderm", "15-Developing mesenchyme", "16-Differentiating retina", "17-Blood", "18-Pharyngeal arch NC", "19-Skeletal muscle", "20-Retina", "21-Pigment cells", "22-Hematopoietic","23-Heart", "24-Neural 6", "25-Digestive precursors",  "26-Endothelial","27-Neural Crest", "28-Cranial NC neural", "29-Putative hatching gland"))
+
+DotPlot(stickle, features="ENSGACG00000005675", cols = c("hotpink", "hotpink4"))+ ggtitle("sox9a expression at 70hpf") + scale_x_discrete(labels="sox9a") + scale_y_discrete(labels=c("0-Hindbrain progenitors", "1-Unknown cells", "2-Hindbrain", "3-Neural 1", "4-Neural 2", "5-Neural 3", "6-Somites 1", "7-Midbrain", "8-Developing Muscle", "9-Somites 2", "10-Retinal progenitors", "11-Neural 4", "12-Epidermis", "13-Neural 5", "14-Pharyngeal endoderm", "15-Developing mesenchyme", "16-Differentiating retina", "17-Blood", "18-Pharyngeal arch NC", "19-Skeletal muscle", "20-Retina", "21-Pigment cells", "22-Hematopoietic","23-Heart", "24-Neural 6", "25-Digestive precursors",  "26-Endothelial","27-Neural Crest", "28-Cranial NC neural", "29-Putative hatching gland"))
+```
+
+# Examining frizzled expression
+
+```{r}
+
+genes <- c("fzd1", "fzd9b", "fzd4", "fzd2", "fzd8b", "fzd10")
+mydot <- DotPlot(stickle, features=c("ENSGACG00000014192", "ENSGACG00000007608", "ENSGACG00000008058", "ENSGACG00000008523", "ENSGACG00000001776", "ENSGACG00000012218"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("Fzd expression patterns in cells from 70 hpf Stickleback") + scale_x_discrete(labels=genes)
+
+
+dotdata_relevant <- subset(mydot$data, pct.exp > 10)
+
+dotdata_relevant
+
+#fzd1 = ENSGACG00000014192
+fzd1 <- subset(dotdata_relevant, features.plot=="ENSGACG00000014192")
+#total number of clusters 
+nrow(fzd1)
+
+#fzd9b
+fzd9b <-subset(dotdata_relevant, features.plot=="ENSGACG00000007608")
+nrow(fzd9b)
+
+#fzd4
+fzd4 <-subset(dotdata_relevant, features.plot=="ENSGACG00000008058")
+nrow(fzd4)
+
+#fzd2
+fzd2 <-subset(dotdata_relevant, features.plot=="ENSGACG00000008523")
+nrow(fzd2)
+
+#fzd8b
+fzd8b <-subset(dotdata_relevant, features.plot=="ENSGACG00000001776")
+nrow(fzd8b)
+
+#fzd10
+fzd10 <-subset(dotdata_relevant, features.plot=="ENSGACG00000012218")
+nrow(fzd10)
+```
+
+
+```{r}
+genes <- c("fzd1", "fzd9b", "fzd4", "fzd2", "fzd8b", "fzd10")
+
+###normalized
+#fzd1
+sum(FetchData(object = stickle, vars = c("ENSGACG00000014192"))[1])
+#fzd9b
+sum(FetchData(object = stickle, vars = c("ENSGACG00000007608"))[1])
+#fzd4
+sum(FetchData(object = stickle, vars = c("ENSGACG00000008058"))[1])
+#fzd2
+sum(FetchData(object = stickle, vars = c("ENSGACG00000008523"))[1])
+#fzd8b
+sum(FetchData(object = stickle, vars = c("ENSGACG00000001776"))[1])
+#fzd10
+sum(FetchData(object = stickle, vars = c("ENSGACG00000012218"))[1])
+
+###raw counts
+sum(FetchData(object = stick, vars = c("ENSGACG00000014192"))[1])
+#fzd9b
+sum(FetchData(object = stick, vars = c("ENSGACG00000007608"))[1])
+#fzd4
+sum(FetchData(object = stick, vars = c("ENSGACG00000008058"))[1])
+#fzd2
+sum(FetchData(object = stick, vars = c("ENSGACG00000008523"))[1])
+#fzd8b
+sum(FetchData(object = stick, vars = c("ENSGACG00000001776"))[1])
+#fzd10
+sum(FetchData(object = stick, vars = c("ENSGACG00000012218"))[1])
+
+
+#num cells expressing gene
+#fzd1
+vari <-FetchData(object = stick, vars = c("ENSGACG00000014192"))[1]
+length(vari[FetchData(object = stick, vars = c("ENSGACG00000014192"))[1]>0])
+
+#fzd9b
+vari <-FetchData(object = stick, vars = c("ENSGACG00000007608"))[1]
+length(vari[FetchData(object = stick, vars = c("ENSGACG00000007608"))[1]>0])
+
+#fzd4
+vari <-FetchData(object = stick, vars = c("ENSGACG00000008058"))[1]
+length(vari[FetchData(object = stick, vars = c("ENSGACG00000008058"))[1]>0])
+
+#fzd2
+vari <-FetchData(object = stick, vars = c("ENSGACG00000008523"))[1]
+length(vari[FetchData(object = stick, vars = c("ENSGACG00000008523"))[1]>0])
+
+#fzd8b
+vari <-FetchData(object = stick, vars = c("ENSGACG00000001776"))[1]
+length(vari[FetchData(object = stick, vars = c("ENSGACG00000001776"))[1]>0])
+
+#fzd10
+vari <-FetchData(object = stick, vars = c("ENSGACG00000012218"))[1]
+length(vari[FetchData(object = stick, vars = c("ENSGACG00000012218"))[1]>0])
+
+```
+
+
+# Analyzing the scRNAseq dataset from the ensembl only annotation
+
+## Loading in the data
+```{r}
+setwd()
+
+# Load dylan's dataset
+GAC70hpf.data2 <- Read10X()
+# Initialize the Seurat object with the raw (non-normalized data).
+stick2 <- CreateSeuratObject(counts = GAC70hpf.data2, project = "StickleAtlas", min.cells = 3, min.features = 200)
+stick2
+
+stickle2 <- PercentageFeatureSet(stick2, pattern = "^MT-", col.name = "percent.mt")
+stickle2 <- SCTransform(stickle2, method = "glmGamPoi", verbose = TRUE)
+
+stickle2 <- RunPCA(stickle2, verbose = FALSE)
+
+ElbowPlot(object = stickle2, ndims=50)
+
+stickle2 <- RunUMAP(stickle2, dims = 1:38, verbose = FALSE)
+
+stickle2 <- FindNeighbors(stickle2, dims = 1:38, verbose = FALSE)
+stickle2 <- FindClusters(stickle2, verbose = FALSE)
+DimPlot(stickle2, label = TRUE) 
+```
+## Examining frizzled expression
+
+```{r}
+
+genes <- c("fzd1", "fzd9b", "fzd4", "fzd2", "fzd8b", "fzd10")
+mydot <- DotPlot(stickle2, features=c("fzd1", "fzd9b", "fzd4", "fzd2", "fzd8b", "fzd10"), cols = c("hotpink", "hotpink4")) + xlab("") + ggtitle("Fzd expression patterns in cells from 70 hpf Stickleback") + scale_x_discrete(labels=genes)
+
+
+dotdata_relevant <- subset(mydot$data, pct.exp > 10)
+
+dotdata_relevant
+
+#fzd1 = ENSGACG00000014192
+fzd1 <- subset(dotdata_relevant, features.plot=="fzd1")
+#total number of clusters 
+nrow(fzd1)
+
+#fzd9b
+fzd9b <-subset(dotdata_relevant, features.plot=="fzd9b")
+nrow(fzd9b)
+
+#fzd4
+fzd4 <-subset(dotdata_relevant, features.plot=="fzd4")
+nrow(fzd4)
+
+#fzd2
+fzd2 <-subset(dotdata_relevant, features.plot=="fzd2")
+nrow(fzd2)
+
+#fzd8b
+fzd8b <-subset(dotdata_relevant, features.plot=="fzd8b")
+nrow(fzd8b)
+
+#fzd10
+fzd10 <-subset(dotdata_relevant, features.plot=="fzd10")
+nrow(fzd10)
+
+#fzd8b 
+
+##normalized counts
+sum(FetchData(object = stickle2, vars = c("fzd1"))[1])/nrow(subset(FetchData(object = stickle2, vars = c("fzd1"))[1], ))
+sum(FetchData(object = stickle2, vars = c("fzd9b"))[1])
+sum(FetchData(object = stickle2, vars = c("fzd4"))[1])
+sum(FetchData(object = stickle2, vars = c("fzd2"))[1])
+sum(FetchData(object = stickle2, vars = c("fzd8b"))[1])
+sum(FetchData(object = stickle2, vars = c("fzd10"))[1])
+
+#raw
+sum(FetchData(object = stick2, vars = c("fzd1"))[1])
+sum(FetchData(object = stick2, vars = c("fzd9b"))[1])
+sum(FetchData(object = stick2, vars = c("fzd4"))[1])
+sum(FetchData(object = stick2, vars = c("fzd2"))[1])
+sum(FetchData(object = stick2, vars = c("fzd8b"))[1])
+sum(FetchData(object = stick2, vars = c("fzd10"))[1])
+
+vari <-FetchData(object = stick2, vars = c("fzd10"))[1]
+length(vari[FetchData(object = stick2, vars = c("fzd10"))[1]>0])
+
+
+vari <-FetchData(object = stick2, vars = c("fzd2"))[1]
+length(vari[FetchData(object = stick2, vars = c("fzd2"))[1]>0])
+
+vari <-FetchData(object = stick2, vars = c("fzd4"))[1]
+length(vari[FetchData(object = stick2, vars = c("fzd4"))[1]>0])
+
+vari <-FetchData(object = stick2, vars = c("fzd9b"))[1]
+length(vari[FetchData(object = stick2, vars = c("fzd9b"))[1]>0])
+
+vari <-FetchData(object = stick2, vars = c("fzd1"))[1]
+length(vari[FetchData(object = stick2, vars = c("fzd1"))[1]>0])
+```
+
+
+
+```{r}
+saveRDS(stickle, file = "stickle_final.rds")
+```
+
