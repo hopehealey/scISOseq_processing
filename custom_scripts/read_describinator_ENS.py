@@ -11,9 +11,8 @@ from types import new_class
 import pysam
 
 ### Alignment file
-samfile = pysam.AlignmentFile("/Users/hopehealey/Dropbox (University of Oregon)/Hope_Dissertation_Folder/SingleCell/Gac_single_cell/70hpf_pilot_trial/Cell_ranger_ensGenome/210609_cellranger/outs/possorted_genome_bam.bam", "rb")
-#gene_annots = "../../Gac_single_cell/70hpf_pilot_trial/Cell_ranger_ensGenome/genome_files/Gasterosteus_aculeatus.BROADS1.104.gtf"
-#output_file = "genome_annotation_results.tsv"
+samfile = pysam.AlignmentFile("possorted_genome_bam.bam", "rb")
+
 
 import argparse
 import regex as re
