@@ -16,3 +16,11 @@ scRNAseq_cellranger_and_analysis: contains scripts to run cell ranger and comple
 IsoSeq_processing: contains scripts written to process Iso-Seq and scISOr-Seq data using the Pacbio SMRT PacBio SMRTAnalysis software, minimap2,  cDNA cupcake, and sqanti3
 
 Tama: scripts used to run tama merge and convert to gtf
+
+## Important Notes
+
+scISOr_Seq_processing.py requires that the input file be in fastq format. Additionally, if using the single cell flag, it requires a list of the cell barcodes. These barcodes can be taken from the barcovdes.tsv.gz file in the filtered feature bc matrix folder of a seurat output by using the below command.
+
+```
+zcat barcodes.tsv.gz | cut -f 1 -d "-" > barcodes_nodash.tsv
+```
